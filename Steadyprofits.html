@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SteadyProfits - Deriv Tick Analyzer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f2f2f2;
+            color: #333;
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .section {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+            color: #34495e;
+        }
+        pre {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h2>SteadyProfits - Deriv Tick Analyzer</h2>
+
+    <div class="section">
+        <span class="label">Live Last Digit:</span>
+        <pre id="lastDigitDisplay">Waiting for tick...</pre>
+    </div>
+
+    <div class="section">
+        <span class="label">Digit Distribution (0–9):</span>
+        <pre id="digitCounts">Loading...</pre>
+    </div>
+
+    <div class="section">
+        <span class="label">Even vs Odd (%):</span>
+        <pre id="evenOdd">Loading...</pre>
+    </div>
+
+    <div class="section">
+        <span class="label">Over (5–9) vs Under (0–4) (%):</span>
+        <pre id="overUnder">Loading...</pre>
+    </div>
+
+    <div class="section">
+        <span class="label">Streak Info:</span>
+        <pre id="streaks">Loading...</pre>
+    </div>
+
+    <script>
+        const token = "LjF3ZOp30SJqkG5"; // Your API token
+        const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+
+        const digitCount = Array(10).fill(0);
+        let totalTicks = 0;
+        let even = 0, odd = 0, over = 0, under = 0;
+        let currentStreakDigit = null;
+        let currentStreakLength = 0;
+        let longestStreakDigit = null;
+        let longestStreakLength = 0;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ authorize: token }));
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.msg_type === "authorize") {
+                ws.send(JSON.stringify({ ticks: "1HZ10V", subscribe: 1 }));
+            }
+
+            if (data.msg_type === "tick") {
+                const quote = data.tick.quote.toString();
+                const lastDigit = parseInt((quote.split(".")[1] || "0").slice(-1));
+
+                totalTicks++;
+                digitCount[lastDigit]++;
+
+                // Last digit display
+                document.getElementById("lastDigitDisplay").textContent = `Last Digit: ${lastDigit}`;
+
+                // Even/Odd
+                if (lastDigit % 2 === 0) even++; else odd++;
+
+                // Over/Under
+                if (lastDigit >= 5) over++; else under++;
+
+                // Streaks
+                if (lastDigit === currentStreakDigit) {
+                    currentStreakLength++;
+                } else {
+                    currentStreakDigit = lastDigit;
+                    currentStreakLength = 1;
+                }
+
+                if (currentStreakLength > longestStreakLength) {
+                    longestStreakLength = currentStreakLength;
+                    longestStreakDigit = currentStreakDigit;
+                }
+
+                updateDigitDistribution();
+                updateEvenOdd();
+                updateOverUnder();
+                updateStreaks();
+            }
+        };
+
+        function updateDigitDistribution() {
+            let display = "";
+            digitCount.forEach((count, digit) => {
+                const percent = totalTicks ? ((count / totalTicks) * 100).toFixed(2) : 0;
+                display += `${digit}: ${count} (${percent}%)\n`;
+            });
+            document.getElementById("digitCounts").textContent = display;
+        }
+
+        function updateEvenOdd() {
+            const evenPct = totalTicks ? ((even / totalTicks) * 100).toFixed(2) : 0;
+            const oddPct = totalTicks ? ((odd / totalTicks) * 100).toFixed(2) : 0;
+            document.getElementById("evenOdd").textContent = `Even: ${evenPct}%\nOdd: ${oddPct}%`;
+        }
+
+        function updateOverUnder() {
+            const overPct = totalTicks ? ((over / totalTicks) * 100).toFixed(2) : 0;
+            const underPct = totalTicks ? ((under / totalTicks) * 100).toFixed(2) : 0;
+            document.getElementById("overUnder").textContent = `Over (5–9): ${overPct}%\nUnder (0–4): ${underPct}%`;
+        }
+
+        function updateStreaks() {
+            document.getElementById("streaks").textContent =
+                `Current: Digit ${currentStreakDigit} → ${currentStreakLength} times\n` +
+                `Longest: Digit ${longestStreakDigit} → ${longestStreakLength} times`;
+        }
+    </script>
+</body>
+</html>
